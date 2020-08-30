@@ -1,0 +1,3 @@
+[0m[[0m[0mdebug[0m] [0m[0mCopy resource mappings: [0m
+[0m[[0m[0mdebug[0m] [0m[0m	(/mnt/c/Users/b-itoh/src/akka-samples-cqrs-scala/src/main/resources/application.conf,/mnt/c/Users/b-itoh/src/akka-samples-cqrs-scala/target/scala-2.13/classes/application.conf)[0m
+[0m[[0m[0mdebug[0m] [0m[0m	(/mnt/c/Users/b-itoh/src/akka-samples-cqrs-scala/src/main/resources/logback.xml,/mnt/c/Users/b-itoh/src/akka-samples-cqrs-scala/target/scala-2.13/classes/logback.xml)[0m
