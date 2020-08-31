@@ -23,6 +23,7 @@ class ShoppingCartRoutes()(implicit system: ActorSystem[_]) {
   import ShoppingCartRoutes._
   import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
   import akka.http.scaladsl.server.Directives._
+  // JsonFormats内のimplicit valはここでインポートされているのか
   import JsonFormats._
 
   val shopping: Route =
@@ -30,12 +31,13 @@ class ShoppingCartRoutes()(implicit system: ActorSystem[_]) {
       pathPrefix("carts") {
         concat(
           post {
+            // POST /shopping/carts/xxx は、アイテムの追加 (AddItem）
+            // as は型によってマーシャリングする。
+            // def as[T](implicit um: FromRequestUnmarshaller[T]) = um
             entity(as[AddItem]) {
               data =>
-                val entityRef =
-                  sharding.entityRefFor(ShoppingCart.EntityKey, data.cartId)
-                val reply: Future[StatusReply[ShoppingCart.Summary]] =
-                  entityRef.ask(ShoppingCart.AddItem(data.itemId, data.quantity, _))
+                val entityRef = sharding.entityRefFor(ShoppingCart.EntityKey, data.cartId)
+                val reply: Future[StatusReply[ShoppingCart.Summary]] = entityRef.ask(ShoppingCart.AddItem(data.itemId, data.quantity, _))
                 onSuccess(reply) {
                   case StatusReply.Success(summary: ShoppingCart.Summary) =>
                     complete(StatusCodes.OK -> summary)
@@ -45,6 +47,7 @@ class ShoppingCartRoutes()(implicit system: ActorSystem[_]) {
             }
           },
           put {
+            // PUT //shopping/carts/xxx は、アイテムの更新（UpdateItem）
             entity(as[UpdateItem]) {
               data =>
                 val entityRef =
@@ -101,17 +104,23 @@ class ShoppingCartRoutes()(implicit system: ActorSystem[_]) {
 
 }
 
+//暗黙のパラメータはもともと、Haskellにある「型クラス」という機能を実現するために導入された機能です、という話が
+//実践Scala入門にあった。その話、なのか？？
 object JsonFormats {
 
   import spray.json.RootJsonFormat
   // import the default encoders for primitive types (Int, String, Lists etc)
   import spray.json.DefaultJsonProtocol._
 
-  implicit val summaryFormat: RootJsonFormat[ShoppingCart.Summary] =
-    jsonFormat2(ShoppingCart.Summary)
-  implicit val addItemFormat: RootJsonFormat[ShoppingCartRoutes.AddItem] =
-    jsonFormat3(ShoppingCartRoutes.AddItem)
-  implicit val updateItemFormat: RootJsonFormat[ShoppingCartRoutes.UpdateItem] =
-    jsonFormat3(ShoppingCartRoutes.UpdateItem)
+  //summaryFormat, addItemFormat, updateItemFormatのいずれも、ここでimplicit valとして設定しただけで
+  // このakka-sample-cqrs-scalaの中では呼ばれていない。implicit valだからか、、、
+
+  // jsonFormat2 は、２パラメータのJSON化。RootJsonFormatはジェネリックをとり、それが ShoppingCart.Summary
+  // 2パラメータ、というのが、２パラメータをとるケースクラス、というのが面白い
+  implicit val summaryFormat: RootJsonFormat[ShoppingCart.Summary] = jsonFormat2(ShoppingCart.Summary)
+  // jsonFormat3は、３パラメータのJSONフォーマッタ
+  // AddItemとUpdateItemもジェネリックで渡しているパラメータ
+  implicit val addItemFormat: RootJsonFormat[ShoppingCartRoutes.AddItem] = jsonFormat3(ShoppingCartRoutes.AddItem)
+  implicit val updateItemFormat: RootJsonFormat[ShoppingCartRoutes.UpdateItem] = jsonFormat3(ShoppingCartRoutes.UpdateItem)
 
 }

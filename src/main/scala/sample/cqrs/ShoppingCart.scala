@@ -69,6 +69,7 @@ object ShoppingCart {
 
   /**
    * This interface defines all the commands that the ShoppingCart persistent actor supports.
+   * CommandはCborSerializableトレイトを継承することで、Jackson CBORによるシリアライズ対象である、ということ。
    */
   sealed trait Command extends CborSerializable
 
@@ -104,6 +105,7 @@ object ShoppingCart {
   /**
    * Summary of the shopping cart state, used in reply messages.
    */
+  // Summary は、２パラメータでjsonFormatされる。
   final case class Summary(items: Map[String, Int], checkedOut: Boolean) extends CborSerializable
 
   /**
