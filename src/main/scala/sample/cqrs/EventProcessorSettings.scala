@@ -5,10 +5,12 @@ import com.typesafe.config.Config
 
 object EventProcessorSettings {
 
+  // ActorSystemが引数で渡されたときは、event-processorパスから設定を読み込む
   def apply(system: ActorSystem[_]): EventProcessorSettings = {
     apply(system.settings.config.getConfig("event-processor"))
   }
 
+  // Configが渡されたとき
   def apply(config: Config): EventProcessorSettings = {
     val tagPrefix: String = config.getString("tag-prefix")
     val parallelism: Int = config.getInt("parallelism")

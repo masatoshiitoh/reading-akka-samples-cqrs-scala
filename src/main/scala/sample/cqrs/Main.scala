@@ -110,6 +110,8 @@ object Main {
 
 }
 
+// ジャーナルされてるイベントのストリームを、モデルに送り込ませるための定義
+// Akka Projections は射影のprojectionなのかな
 object Guardian {
 
   def createProjectionFor(
@@ -127,6 +129,7 @@ object Guardian {
       handler = () => new ShoppingCartProjectionHandler(tag, system))
   }
 
+  // Main.startNodeのなかで、Guardian.applyが呼ばれている。
   def apply(): Behavior[Nothing] = {
     Behaviors.setup[Nothing] { context =>
       val system = context.system
@@ -137,6 +140,9 @@ object Guardian {
 
       ShoppingCart.init(system, settings)
 
+      // read-modelのロールを持っている場合・・・？
+      // ローカルでシャードデーモンを起動する？
+      // サンプルの構造に起因した処理なのかな
       if (Cluster(system).selfMember.hasRole("read-model")) {
 
         // we only want to run the daemon processes on the read-model nodes

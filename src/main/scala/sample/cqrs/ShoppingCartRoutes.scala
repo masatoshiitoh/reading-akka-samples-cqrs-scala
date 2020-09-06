@@ -104,8 +104,9 @@ class ShoppingCartRoutes()(implicit system: ActorSystem[_]) {
 
 }
 
-//暗黙のパラメータはもともと、Haskellにある「型クラス」という機能を実現するために導入された機能です、という話が
-//実践Scala入門にあった。その話、なのか？？
+// 暗黙のパラメータはもともと、Haskellにある「型クラス」という機能を実現するために導入された機能です、という話が
+// 実践Scala入門にあった。その話のよう。
+// 型を変換する関数を登録することで、これらが使われるようになる。
 object JsonFormats {
 
   import spray.json.RootJsonFormat

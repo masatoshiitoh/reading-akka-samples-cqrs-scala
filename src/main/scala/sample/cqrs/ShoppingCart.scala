@@ -31,11 +31,15 @@ import akka.persistence.typed.scaladsl.ReplyEffect
  * loaded from the database - each event will be replayed to recreate the state
  * of the entity.
  */
+// あー、objectの中でcase classを宣言して使うとかのところが、まだしっくりきてないな
+// objectは、static メソッドを定義するためのもの（実践Scala入門 2-4、「Scalaにおけるstatic」
+//
 object ShoppingCart {
 
   /**
    * The current state held by the persistent entity.
    */
+  // ShoppingCartの状態（State）をcase classで定義
   final case class State(items: Map[String, Int], checkoutDate: Option[Instant]) extends CborSerializable {
 
     def isCheckedOut: Boolean =
@@ -71,6 +75,8 @@ object ShoppingCart {
    * This interface defines all the commands that the ShoppingCart persistent actor supports.
    * CommandはCborSerializableトレイトを継承することで、Jackson CBORによるシリアライズ対象である、ということ。
    */
+  // コマンドは CborSerializable
+  // sealed は、このファイル内だけで使えるtraitという指定
   sealed trait Command extends CborSerializable
 
   /**
@@ -111,6 +117,7 @@ object ShoppingCart {
   /**
    * This interface defines all the events that the ShoppingCart supports.
    */
+  // コマンドとイベントがそれぞれCborSerializableで作成されてる。イベントはcartIdを持つ。
   sealed trait Event extends CborSerializable {
     def cartId: String
   }
@@ -123,8 +130,10 @@ object ShoppingCart {
 
   final case class CheckedOut(cartId: String, eventTime: Instant) extends Event
 
+  // EntityTypeKey[T]は、ClusterSharding.scalaで定義されてる。nameはユニークでないといけない
   val EntityKey: EntityTypeKey[Command] = EntityTypeKey[Command]("ShoppingCart")
 
+  // Main.scalaのなかで、ShoppingCart.initとして呼ばれている。
   def init(system: ActorSystem[_], eventProcessorSettings: EventProcessorSettings): Unit = {
     ClusterSharding(system).init(
       Entity(EntityKey) {
@@ -133,7 +142,9 @@ object ShoppingCart {
           val eventProcessorTag = eventProcessorSettings.tagPrefix + "-" + n
           ShoppingCart(entityContext.entityId, Set(eventProcessorTag)) // これはapplyを呼ぶ
       }.withRole("write-model"))
+    // withRoleは、「Run the Entity actors on nodes with the given role.」とのこと。
   }
+  // うーん、ShoppingCartは結局、cartIdごとにインスタンスがあるのかな？ノードごとに1インスタンスずつあるだけなのかな
 
   // 初期化後の apply は、どのように Stateを構築しなおすのか？
   // 再起動後、アクセス前にこんなログが出ていたが関係あるか？ 作成されていたカート数にあってるっぽいが、、、
@@ -149,34 +160,41 @@ object ShoppingCart {
   // * of the entity.
   // まずはここを読むか、、、
   // https://doc.akka.io/docs/akka/current/typed/persistence.html
+  // ShoppingCartのBehaviorは、EventSourcedBehavior.withEnforcedRepliesで、こんな初期化をするよ、という記述
+  // 各パラメータは、withEnforcedRepliesを参照。
+  // ShoppingCartは
   def apply(cartId: String, eventProcessorTags: Set[String]): Behavior[Command] = {
     EventSourcedBehavior
       .withEnforcedReplies[Command, Event, State](
         PersistenceId(EntityKey.name, cartId),
         State.empty,
-        (state, command) =>
+        (state, command) => // 第3引数は、コマンドハンドラの登録。
           // カートをチェックアウトすると、以後は状態を変えられない、という仕様の実装
           //The shopping cart behavior changes if it's checked out or not.
           // The commands are handled differently for each case.
           if (state.isCheckedOut) checkedOutShoppingCart(cartId, state, command)
           else openShoppingCart(cartId, state, command),
-        (state, event) => handleEvent(state, event))
+        (state, event) => // 第4引数はイベントハンドラの登録
+          handleEvent(state, event))
       .withTagger(_ => eventProcessorTags)
       .withRetention(RetentionCriteria.snapshotEvery(numberOfEvents = 100, keepNSnapshots = 3))
       .onPersistFailure(SupervisorStrategy.restartWithBackoff(200.millis, 5.seconds, 0.1))
   }
 
+  // コマンドハンドラから呼ばれるうちの1つ
+  // コマンドハンドラはReplyEffectを返す。Effectは、イベントソースActorがCommandに対して返すもの、ということらしい。ここの関係は固定か。
   private def openShoppingCart(cartId: String, state: State, command: Command): ReplyEffect[Event, State] =
     command match {
-      case AddItem(itemId, quantity, replyTo) =>
-        if (state.hasItem(itemId))
+      case AddItem(itemId, quantity, replyTo) => // AddItemコマンドが来ました
+        if (state.hasItem(itemId)) // すでにstateに当該アイテムがあるときはUpdateを使う必要があり、AddItemはエラーになる
           Effect.reply(replyTo)(StatusReply.Error(s"Item '$itemId' was already added to this shopping cart"))
-        else if (quantity <= 0)
+        else if (quantity <= 0) //
           Effect.reply(replyTo)(StatusReply.Error("Quantity must be greater than zero"))
         else {
-          // カート操作で状態を変更したときは Effect.presistで状態を永続化して、応答する
+          // カート操作で状態を変更したときは Effect.presistで状態を永続化して、応答する、と言いたいところだが
+          // thenReplyメソッドの実態がよくわからん
           Effect
-            .persist(ItemAdded(cartId, itemId, quantity))
+            .persist(ItemAdded(cartId, itemId, quantity)) // persistは Effectのeventsをこの「ItemAddedイベント:NIL」のリストなのかな、に置き換える
             .thenReply(replyTo)(updatedCart => StatusReply.Success(updatedCart.toSummary))
         }
 
@@ -211,6 +229,7 @@ object ShoppingCart {
         Effect.reply(replyTo)(state.toSummary)
     }
 
+  // コマンドハンドラから呼ばれるうちの1つ
   private def checkedOutShoppingCart(cartId: String, state: State, command: Command): ReplyEffect[Event, State] =
     command match {
       case Get(replyTo) =>
@@ -225,6 +244,7 @@ object ShoppingCart {
         Effect.reply(cmd.replyTo)(StatusReply.Error("Can't checkout already checked out shopping cart"))
     }
 
+  // イベントハンドラから呼ばれる。stateへの操作を行う
   private def handleEvent(state: State, event: Event) = {
     event match {
       case ItemAdded(_, itemId, quantity)            => state.updateItem(itemId, quantity)
@@ -233,4 +253,8 @@ object ShoppingCart {
       case CheckedOut(_, eventTime)                  => state.checkout(eventTime)
     }
   }
+
+
+  // コマンドは、それぞれにEffectを発生させる。Effectには ItemAdded などのイベントを永続化させるものもある
+  // イベントハンドラは、イベントの種類ごとにstateを変化させる
 }

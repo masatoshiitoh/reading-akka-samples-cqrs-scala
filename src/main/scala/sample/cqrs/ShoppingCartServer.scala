@@ -11,6 +11,8 @@ import akka.http.scaladsl.server.Route
 import akka.Done
 import akka.{ actor => classic }
 
+// ShoppingCartServerは、ウェブサーバー
+// Guardian.apply の中で、ShoppingCartServerが startされてる。ShoppingCartRoutesがroutesに渡されてる
 class ShoppingCartServer(routes: Route, port: Int, system: ActorSystem[_]) {
   import akka.actor.typed.scaladsl.adapter._
   implicit val classicSystem: classic.ActorSystem = system.toClassic
